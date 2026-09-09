@@ -48,6 +48,3 @@ end;$$;
 
 revoke all on function public.check_in_member(text,uuid) from public,anon,authenticated;
 grant execute on function public.check_in_member(text,uuid) to service_role;
-
-insert into public.membership_plans(name,price,duration_days,visit_limit) values
-('Gói 1 tháng',650000,30,null),('Gói 3 tháng',1650000,90,null),('Gói 6 tháng',2900000,180,null),('Gói 12 tháng',4900000,365,null),('Gói 30 lượt',1200000,120,30);

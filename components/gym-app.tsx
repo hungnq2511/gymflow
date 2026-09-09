@@ -62,94 +62,9 @@ type Member = {
   status: 'Đang tập' | 'Sắp hết hạn' | 'Hết hạn';
   remaining: string;
 };
-const initialMembers: Member[] = [
-  {
-    id: 'GF-1042',
-    name: 'Nguyễn Minh Anh',
-    phone: '090 812 3456',
-    plan: 'Gói 12 tháng',
-    expiry: '18/05/2027',
-    status: 'Đang tập',
-    remaining: 'Không giới hạn',
-  },
-  {
-    id: 'GF-1038',
-    name: 'Trần Quốc Huy',
-    phone: '091 234 8877',
-    plan: 'Gói 3 tháng',
-    expiry: '15/09/2026',
-    status: 'Sắp hết hạn',
-    remaining: 'Không giới hạn',
-  },
-  {
-    id: 'GF-1029',
-    name: 'Lê Hoàng Nam',
-    phone: '098 771 2200',
-    plan: 'Gói 30 lượt',
-    expiry: '30/11/2026',
-    status: 'Đang tập',
-    remaining: '18 lượt',
-  },
-  {
-    id: 'GF-1011',
-    name: 'Phạm Thu Hà',
-    phone: '093 566 4402',
-    plan: 'Gói 6 tháng',
-    expiry: '02/09/2026',
-    status: 'Hết hạn',
-    remaining: '0 lượt',
-  },
-  {
-    id: 'GF-1007',
-    name: 'Võ Gia Bảo',
-    phone: '090 332 1199',
-    plan: 'Gói 12 tháng',
-    expiry: '21/03/2027',
-    status: 'Đang tập',
-    remaining: 'Không giới hạn',
-  },
-];
-const plans = [
-  ['Gói 1 tháng', 650000, '30 ngày', 48, 'bg-sky-500'],
-  ['Gói 3 tháng', 1650000, '90 ngày', 102, 'bg-violet-500'],
-  ['Gói 6 tháng', 2900000, '180 ngày', 96, 'bg-emerald-500'],
-  ['Gói 12 tháng', 4900000, '365 ngày', 164, 'bg-orange-500'],
-  ['Gói 30 lượt', 1200000, '120 ngày', 18, 'bg-pink-500'],
-] as const;
-const payments = [
-  [
-    'PT-260909-018',
-    'Nguyễn Minh Anh',
-    'Gói 12 tháng',
-    4900000,
-    'Chuyển khoản',
-    '09/09/2026',
-  ],
-  [
-    'PT-260908-041',
-    'Trần Quốc Huy',
-    'Gia hạn 3 tháng',
-    1650000,
-    'Tiền mặt',
-    '08/09/2026',
-  ],
-  [
-    'PT-260908-022',
-    'Lê Hoàng Nam',
-    'Gói 30 lượt',
-    1200000,
-    'Chuyển khoản',
-    '08/09/2026',
-  ],
-  [
-    'PT-260907-009',
-    'Võ Gia Bảo',
-    'Gói 12 tháng',
-    4900000,
-    'Tiền mặt',
-    '07/09/2026',
-  ],
-] as const;
+const initialMembers: Member[] = [];
+const plans: Array<[string, number, string, number, string]> = [];
+const payments: Array<[string, string, string, number, string, string]> = [];
 const money = (n: number) =>
   new Intl.NumberFormat('vi-VN', {
     style: 'currency',
@@ -388,7 +303,7 @@ export default function GymApp() {
           <div>
             <p className="font-heading text-lg font-bold text-white">GYMFLOW</p>
             <p className="text-xs text-white/45">
-              Quận 7 · {database === 'connected' ? 'Supabase' : 'Dữ liệu mẫu'}
+              Quận 7 · {database === 'connected' ? 'Supabase' : 'Chưa kết nối'}
             </p>
           </div>
         </div>
@@ -547,12 +462,7 @@ function Avatar({ name }: { name: string }) {
   );
 }
 function Dashboard() {
-  const ci = [
-    ['Nguyễn Minh Anh', 'Gói 12 tháng', '07:42'],
-    ['Trần Quốc Huy', 'Gói 3 tháng', '08:15'],
-    ['Lê Hoàng Nam', 'Gói 30 lượt', '08:38'],
-    ['Phạm Thu Hà', 'Gói 6 tháng', '09:03'],
-  ];
+  const ci: Array<[string, string, string]> = [];
   return (
     <>
       <Head
@@ -562,15 +472,10 @@ function Dashboard() {
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          ['Hội viên hoạt động', '428', '+12 tháng này', Users],
-          ['Check-in hôm nay', '64', 'Đỉnh điểm 18:00', Activity],
-          [
-            'Doanh thu tháng',
-            '128,4 tr',
-            '+8,2% tháng trước',
-            CircleDollarSign,
-          ],
-          ['Sắp hết hạn', '18', 'Trong 7 ngày tới', CalendarClock],
+          ['Hội viên hoạt động', '0', 'Chưa có dữ liệu', Users],
+          ['Check-in hôm nay', '0', 'Chưa có lượt check-in', Activity],
+          ['Doanh thu tháng', '0 ₫', 'Chưa có giao dịch', CircleDollarSign],
+          ['Sắp hết hạn', '0', 'Trong 7 ngày tới', CalendarClock],
         ].map(([l, v, n, I]) => (
           <article key={l as string} className="metric-card">
             <div className="mb-6 flex justify-between">
@@ -599,6 +504,11 @@ function Dashboard() {
                 <time className="text-sm">{t}</time>
               </div>
             ))}
+            {!ci.length && (
+              <p className="py-12 text-center text-sm text-muted-foreground">
+                Chưa có lượt check-in.
+              </p>
+            )}
           </div>
         </article>
       </div>
@@ -611,12 +521,12 @@ function Revenue() {
       <div className="mb-7 flex justify-between">
         <div>
           <h3 className="panel-title">Doanh thu 7 ngày</h3>
-          <p className="text-sm text-muted-foreground">26,8 triệu đồng</p>
+          <p className="text-sm text-muted-foreground">0 ₫</p>
         </div>
-        <Badge className="bg-emerald-100 text-emerald-700">+14,2%</Badge>
+        <Badge variant="outline">Chưa có dữ liệu</Badge>
       </div>
       <div className="flex h-52 items-end gap-3 border-b border-l px-3">
-        {[42, 62, 49, 78, 68, 92, 82].map((h, i) => (
+        {[0, 0, 0, 0, 0, 0, 0].map((h, i) => (
           <div key={i} className="flex h-full flex-1 items-end">
             <div
               className="w-full rounded-t-md bg-primary/85 hover:bg-primary"
@@ -772,6 +682,11 @@ function Plans({
             </Button>
           </article>
         ))}
+        {!list.length && (
+          <p className="panel col-span-full py-12 text-center text-muted-foreground">
+            Chưa có gói tập. Hãy tạo gói đầu tiên.
+          </p>
+        )}
       </div>
     </>
   );
@@ -797,14 +712,14 @@ function Checkin({
           </div>
           <h3 className="panel-title">Quét hoặc nhập mã QR</h3>
           <p className="mt-2 text-sm text-muted-foreground">
-            Nhập mã hội viên để mô phỏng máy quét.
+            Nhập mã hội viên hoặc mã QR tại quầy.
           </p>
           <Input
             value={qr}
             onChange={(e) => setQr(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
             className="mt-6 text-center uppercase"
-            placeholder="GF-1042"
+            placeholder="Nhập mã hội viên"
           />
           <Button className="mt-3 w-full" onClick={submit}>
             Xác nhận check-in
@@ -879,6 +794,11 @@ function Payments({ notice }: { notice: (s: string) => void }) {
             ))}
           </TableBody>
         </Table>
+        {!payments.length && (
+          <p className="py-12 text-center text-muted-foreground">
+            Chưa có giao dịch thanh toán.
+          </p>
+        )}
       </div>
     </>
   );
@@ -897,9 +817,9 @@ function Reports({ csv }: { csv: () => void }) {
       />
       <div className="grid gap-4 md:grid-cols-3">
         {[
-          ['Doanh thu tháng 9', '128,4 tr', 'Tăng 8,2%'],
-          ['Gói đã bán', '42', '16 lượt gia hạn'],
-          ['Doanh thu trung bình', '3,06 tr', 'Trên mỗi giao dịch'],
+          ['Doanh thu tháng', '0 ₫', 'Chưa có giao dịch'],
+          ['Gói đã bán', '0', 'Chưa có lượt gia hạn'],
+          ['Doanh thu trung bình', '0 ₫', 'Chưa có dữ liệu'],
         ].map(([a, b, c]) => (
           <article className="metric-card" key={a}>
             <p className="text-sm text-muted-foreground">{a}</p>
