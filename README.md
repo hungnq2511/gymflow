@@ -1,20 +1,24 @@
 # GymFlow
 
-MVP quản lý một chi nhánh gym: tổng quan, hội viên, gói tập, thanh toán, check-in và báo cáo CSV.
+Ứng dụng quản lý một chi nhánh gym, dùng Supabase PostgreSQL và API server-side.
 
-## Chạy local
+## Thiết lập Supabase
 
-```bash
-npm install
-npm run db:generate
-npm run dev
+1. Tạo project tại Supabase.
+2. Mở **SQL Editor**, dán và chạy toàn bộ file `supabase/migrations/202609090001_initial_schema.sql`.
+3. Sao chép `.env.example` thành `.env.local`, rồi điền ba biến:
+
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
-Ứng dụng triển khai bằng OpenAI Sites với D1. Schema trong `db/schema.ts` có thể chuyển sang PostgreSQL/Supabase bằng cách đổi adapter Drizzle. Danh tính đăng nhập do Sites cung cấp; vai trò nghiệp vụ lưu trong `profiles` và phải được kiểm tra tại mọi thao tác phía máy chủ.
+4. Chạy `npm run dev`, đăng nhập vào Site. Người đầu tiên truy cập database trống được tạo thành `manager`.
 
-## Quy tắc dữ liệu
+## Bảo mật
 
-- Không xóa cứng thanh toán hoặc đăng ký gói; chuyển sang `cancelled`.
-- Check-in kiểm tra hội viên, ngày hết hạn, số lượt và khoảng chống trùng 10 phút.
-- Tạo check-in và trừ lượt phải chạy trong cùng một batch/transaction D1.
-- Doanh thu chỉ tổng hợp thanh toán có trạng thái `valid`.
+- Không commit `.env.local`.
+- Không dùng `SUPABASE_SERVICE_ROLE_KEY` trong Client Component hoặc biến `NEXT_PUBLIC_*`.
+- RLS chặn truy cập trực tiếp bằng anon key; mọi thao tác dữ liệu đi qua API server và kiểm tra vai trò.
+- Khi triển khai Sites, thêm ba biến qua phần Environment Variables của Site.

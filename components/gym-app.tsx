@@ -163,6 +163,7 @@ export default function GymApp() {
     [open, setOpen] = useState(false),
     [mobile, setMobile] = useState(false),
     [toast, setToast] = useState(''),
+    [database, setDatabase] = useState<'demo' | 'connected'>('demo'),
     [qr, setQr] = useState(''),
     [result, setResult] = useState<'ok' | 'error' | null>(null);
   const filtered = useMemo(
@@ -176,6 +177,50 @@ export default function GymApp() {
       ),
     [members, search, status],
   );
+  useEffect(() => {
+    void fetch('/api/bootstrap')
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          members: Array<{
+            member_code: string;
+            full_name: string;
+            phone: string;
+            status: string;
+            subscriptions?: Array<{
+              end_date: string;
+              remaining_visits: number | null;
+              status: string;
+              membership_plans?: { name: string } | null;
+            }>;
+          }>;
+        };
+        setMembers(
+          data.members.map((member) => {
+            const subscription = member.subscriptions?.find(
+              (item) => item.status === 'active',
+            );
+            const expired = subscription
+              ? subscription.end_date < new Date().toISOString().slice(0, 10)
+              : true;
+            return {
+              id: member.member_code,
+              name: member.full_name,
+              phone: member.phone,
+              plan: subscription?.membership_plans?.name ?? 'Chưa có gói',
+              expiry: subscription?.end_date ?? '—',
+              status: expired ? 'Hết hạn' : 'Đang tập',
+              remaining:
+                subscription?.remaining_visits == null
+                  ? 'Không giới hạn'
+                  : `${subscription.remaining_visits} lượt`,
+            };
+          }),
+        );
+        setDatabase('connected');
+      })
+      .catch(() => undefined);
+  }, []);
   useEffect(() => {
     const c = (
       document as Document & {
@@ -221,12 +266,23 @@ export default function GymApp() {
       setToast(s);
       setTimeout(() => setToast(''), 2500);
     },
-    add = (d: FormData) => {
+    add = async (d: FormData) => {
       const rawName = d.get('name'),
         rawPhone = d.get('phone'),
         name = typeof rawName === 'string' ? rawName.trim() : '',
         phone = typeof rawPhone === 'string' ? rawPhone.trim() : '';
       if (!name || !phone) return;
+      if (database === 'connected') {
+        const response = await fetch('/api/members', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fullName: name, phone }),
+        });
+        if (!response.ok) {
+          notice('Không thể lưu hội viên');
+          return;
+        }
+      }
       setMembers((v) => [
         {
           id: `GF-${1050 + v.length}`,
@@ -242,7 +298,18 @@ export default function GymApp() {
       setOpen(false);
       notice('Đã thêm hội viên mới');
     },
-    checkin = () => {
+    checkin = async () => {
+      if (database === 'connected') {
+        const response = await fetch('/api/check-ins', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: qr.trim() }),
+        });
+        const payload = (await response.json()) as { ok?: boolean };
+        setResult(response.ok && payload.ok ? 'ok' : 'error');
+        if (response.ok && payload.ok) notice('Check-in thành công');
+        return;
+      }
       const m = members.find(
         (x) => x.id.toLowerCase() === qr.trim().toLowerCase(),
       );
@@ -289,7 +356,9 @@ export default function GymApp() {
           </span>
           <div>
             <p className="font-heading text-lg font-bold text-white">GYMFLOW</p>
-            <p className="text-xs text-white/45">Quận 7, TP.HCM</p>
+            <p className="text-xs text-white/45">
+              Quận 7 · {database === 'connected' ? 'Supabase' : 'Dữ liệu mẫu'}
+            </p>
           </div>
         </div>
         <nav className="space-y-1">
@@ -364,9 +433,7 @@ export default function GymApp() {
         </div>
       </section>
       {toast && (
-        <output
-          className="fixed bottom-5 right-5 z-50 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-xl"
-        >
+        <output className="fixed bottom-5 right-5 z-50 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-xl">
           {toast}
         </output>
       )}
@@ -380,7 +447,7 @@ function AddDialog({
 }: {
   open: boolean;
   setOpen: (x: boolean) => void;
-  add: (d: FormData) => void;
+  add: (d: FormData) => void | Promise<void>;
 }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
