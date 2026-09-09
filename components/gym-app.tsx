@@ -45,6 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { supabase } from '@/utils/supabase';
 type Page =
   | 'Tổng quan'
   | 'Hội viên'
@@ -164,6 +165,9 @@ export default function GymApp() {
     [mobile, setMobile] = useState(false),
     [toast, setToast] = useState(''),
     [database, setDatabase] = useState<'demo' | 'connected'>('demo'),
+    [livePlans, setLivePlans] = useState<
+      Array<[string, number, string, number, string]>
+    >(plans.map((plan) => [...plan])),
     [qr, setQr] = useState(''),
     [result, setResult] = useState<'ok' | 'error' | null>(null);
   const filtered = useMemo(
@@ -177,6 +181,33 @@ export default function GymApp() {
       ),
     [members, search, status],
   );
+  useEffect(() => {
+    if (!supabase) return;
+    void supabase
+      .from('membership_plans')
+      .select('name,price,duration_days')
+      .eq('is_active', true)
+      .order('price')
+      .then(({ data }) => {
+        if (!data?.length) return;
+        const colors = [
+          'bg-sky-500',
+          'bg-violet-500',
+          'bg-emerald-500',
+          'bg-orange-500',
+          'bg-pink-500',
+        ];
+        setLivePlans(
+          data.map((plan, index) => [
+            plan.name,
+            Number(plan.price),
+            `${plan.duration_days} ngày`,
+            0,
+            colors[index % colors.length],
+          ]),
+        );
+      });
+  }, []);
   useEffect(() => {
     void fetch('/api/bootstrap')
       .then(async (response) => {
@@ -424,7 +455,7 @@ export default function GymApp() {
               csv={csv}
             />
           )}{' '}
-          {page === 'Gói tập' && <Plans />}
+          {page === 'Gói tập' && <Plans list={livePlans} />}
           {page === 'Check-in' && (
             <Checkin qr={qr} setQr={setQr} result={result} submit={checkin} />
           )}{' '}
@@ -713,7 +744,11 @@ function Members({
     </>
   );
 }
-function Plans() {
+function Plans({
+  list,
+}: {
+  list: Array<[string, number, string, number, string]>;
+}) {
   return (
     <>
       <Head
@@ -722,7 +757,7 @@ function Plans() {
         action={<Button>+ Tạo gói tập</Button>}
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {plans.map(([n, p, d, m, c]) => (
+        {list.map(([n, p, d, m, c]) => (
           <article className="panel" key={n}>
             <div className={`mb-6 h-2 w-14 rounded-full ${c}`} />
             <h3 className="text-xl font-bold">{n}</h3>

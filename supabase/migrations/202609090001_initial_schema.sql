@@ -27,6 +27,7 @@ alter table public.check_ins enable row level security;
 alter table public.audit_logs enable row level security;
 -- Không cấp policy cho anon/authenticated. Ứng dụng truy cập qua API server đã xác thực,
 -- dùng service role; service role bypass RLS. Tuyệt đối không đưa key này xuống browser.
+create policy "public can read active plans" on public.membership_plans for select to anon, authenticated using (is_active = true);
 
 create or replace function public.check_in_member(p_qr_token text,p_actor_id uuid)
 returns jsonb language plpgsql security definer set search_path=public as $$

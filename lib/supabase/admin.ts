@@ -5,8 +5,8 @@ type Options = { method?: Method; body?: unknown; prefer?: string };
 
 function config() {
   const runtime = env as unknown as Record<string, string | undefined>;
-  const url = runtime.SUPABASE_URL ?? process.env.SUPABASE_URL;
-  const anonKey = runtime.SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY;
+  const url = runtime.SUPABASE_URL ?? runtime.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
+  const anonKey = runtime.SUPABASE_ANON_KEY ?? runtime.VITE_SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   const serviceKey =
     runtime.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !anonKey || !serviceKey)
