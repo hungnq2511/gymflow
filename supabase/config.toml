@@ -1,0 +1,5 @@
+project_id = "gymflow"
+
+[auth.email.template.invite]
+subject = "Lời mời tạo tài khoản GymFlow"
+content_path = "./supabase/templates/invite.html"

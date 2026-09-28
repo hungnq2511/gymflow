@@ -1,48 +1,59 @@
-import { getChatGPTUser } from '@/app/chatgpt-auth';
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 
+export type Role = 'manager' | 'staff' | 'member';
 export type Actor = {
   id: string;
-  role: 'manager' | 'staff' | 'member';
-  email: string;
+  authUserId: string;
+  role: Role;
+  email: string | null;
+  fullName: string;
+  mustChangePassword: boolean;
 };
-export async function requireActor(roles: Actor['role'][]): Promise<Actor> {
-  const user = await getChatGPTUser();
-  if (!user) throw new Error('UNAUTHENTICATED');
-  const key = encodeURIComponent(user.userId),
-    rows = await supabaseAdmin<Actor[]>(
-      `profiles?external_auth_id=eq.${key}&select=id,role,email`,
-    );
-  let actor = rows[0];
-  if (!actor) {
-    const count = await supabaseAdmin<{ id: string }[]>(
-      'profiles?select=id&limit=1',
-    );
-    if (count.length) throw new Error('FORBIDDEN');
-    const created = await supabaseAdmin<Actor[]>('profiles', {
-      method: 'POST',
-      body: {
-        external_auth_id: user.userId,
-        email: user.email,
-        full_name: user.displayName,
-        role: 'manager',
-        status: 'active',
-      },
-    });
-    actor = created[0];
-  }
+
+export async function currentActor(): Promise<Actor | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await createAdminClient()
+    .from('profiles')
+    .select('id,auth_user_id,email,full_name,role,status,must_change_password')
+    .eq('auth_user_id', user.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data || data.status !== 'active') return null;
+  return {
+    id: data.id,
+    authUserId: data.auth_user_id,
+    role: data.role,
+    email: data.email,
+    fullName: data.full_name,
+    mustChangePassword: data.must_change_password,
+  };
+}
+
+export async function requireActor(roles: Role[]): Promise<Actor> {
+  const actor = await currentActor();
+  if (!actor) throw new Error('UNAUTHENTICATED');
+  if (actor.mustChangePassword) throw new Error('PASSWORD_CHANGE_REQUIRED');
   if (!roles.includes(actor.role)) throw new Error('FORBIDDEN');
   return actor;
 }
+
 export function apiError(error: unknown) {
-  const message = error instanceof Error ? error.message : 'UNKNOWN';
+  const raw = error instanceof Error ? error.message : 'UNKNOWN';
+  const message = raw.includes('duplicate key') ? 'DUPLICATE_DATA' : raw;
   const status =
     message === 'UNAUTHENTICATED'
       ? 401
-      : message === 'FORBIDDEN'
+      : message === 'FORBIDDEN' || message === 'PASSWORD_CHANGE_REQUIRED'
         ? 403
         : message === 'SUPABASE_NOT_CONFIGURED'
           ? 503
-          : 500;
+          : message === 'DUPLICATE_DATA'
+            ? 409
+            : 500;
   return Response.json({ error: message }, { status });
 }

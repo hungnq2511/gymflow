@@ -11,6 +11,11 @@
 # testing
 /coverage
 
+# generated reports and caches
+/artifacts/
+__pycache__/
+*.py[cod]
+
 # next.js
 /.next/
 /.vinext/
@@ -36,3 +41,4 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+*.tsbuildinfo
