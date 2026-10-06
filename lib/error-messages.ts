@@ -34,6 +34,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   DATA_NOT_FOUND: 'Không tìm thấy dữ liệu yêu cầu.',
   RECOVERY_SESSION_MISSING:
     'Phiên đặt lại mật khẩu không tồn tại. Hãy mở lại liên kết mới nhất trong email.',
+  ACCOUNT_NOT_LINKED:
+    'Tài khoản chưa được liên kết với hồ sơ. Vui lòng liên hệ quản trị viên.',
+  PASSWORD_SETUP_NOT_ALLOWED:
+    'Phiên này không được phép đặt mật khẩu. Hãy mở lại liên kết mới nhất trong email.',
   PASSWORD_MISMATCH: 'Mật khẩu xác nhận không khớp.',
   WEAK_PASSWORD:
     'Mật khẩu chưa đủ mạnh. Hãy dùng ít nhất 8 ký tự và tránh mật khẩu phổ biến.',

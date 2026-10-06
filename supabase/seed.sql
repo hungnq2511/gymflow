@@ -1,47 +1,120 @@
--- GymFlow MVP demo data
--- Yêu cầu: đã chạy đủ 3 migration trước khi chạy file này.
--- An toàn khi chạy lại: chỉ cập nhật các bản ghi demo có UUID cố định, không xóa dữ liệu thật.
+-- GymFlow sample data
+-- Yêu cầu: chạy toàn bộ migration trong supabase/migrations trước file này.
+-- Có thể chạy lại: dữ liệu mẫu dùng UUID cố định và được upsert, không xóa dữ liệu thật.
+-- Tài khoản quản trị: admin1@gmail.com / Admin@123
 
 begin;
 set local timezone = 'Asia/Ho_Chi_Minh';
 
--- 1. Hồ sơ quản lý, nhân viên và 2 tài khoản hội viên mẫu.
--- Muốn đăng nhập, tạo Auth User trong Supabase Authentication bằng đúng email bên dưới.
-insert into public.profiles (id, email, full_name, phone, role, status)
+-- 1. Một tài khoản quản trị có thể đăng nhập ngay.
+insert into public.profiles
+  (id, email, username, full_name, phone, role, status, must_change_password)
 values
-  ('00000000-0000-0000-0000-000000000101', 'manager.demo@gymflow.local', 'Nguyễn Minh Quản', '0901000001', 'manager', 'active'),
-  ('00000000-0000-0000-0000-000000000102', 'staff.demo@gymflow.local',   'Trần Thu Lễ Tân',  '0901000002', 'staff',   'active'),
-  ('00000000-0000-0000-0000-000000000201', 'member.demo@gymflow.local',  'Nguyễn Văn An',    '0902000001', 'member',  'active'),
-  ('00000000-0000-0000-0000-000000000202', 'member2.demo@gymflow.local', 'Trần Thị Bình',     '0902000002', 'member',  'active')
+  ('00000000-0000-0000-0000-000000000101', 'admin1@gmail.com', 'admin1',
+   'Quản trị viên GymFlow', '0901000001', 'manager', 'active', false)
 on conflict (id) do update set
-  email=excluded.email, full_name=excluded.full_name, phone=excluded.phone,
-  role=excluded.role, status=excluded.status, updated_at=now();
+  email=excluded.email, username=excluded.username, full_name=excluded.full_name,
+  phone=excluded.phone, role=excluded.role, status=excluded.status,
+  must_change_password=excluded.must_change_password, auth_user_id=null,
+  external_auth_id=null, updated_at=now();
 
--- 2. Các loại gói: không giới hạn, theo lượt và ngừng bán.
+-- Supabase Auth user cho tài khoản quản trị. Trigger on_auth_user_created sẽ liên kết profile.
+insert into auth.users
+  (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+   raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+   confirmation_token, email_change, email_change_token_new, recovery_token)
+select
+  '00000000-0000-0000-0000-000000000000',
+  '10000000-0000-0000-0000-000000000101',
+  'authenticated', 'authenticated', 'admin1@gmail.com',
+  crypt('Admin@123', gen_salt('bf')), now(),
+  '{"provider":"email","providers":["email"]}'::jsonb,
+  '{"full_name":"Quản trị viên GymFlow","profile_id":"00000000-0000-0000-0000-000000000101"}'::jsonb,
+  now(), now(), '', '', '', ''
+where not exists (
+  select 1 from auth.users where lower(email)=lower('admin1@gmail.com')
+);
+
+insert into auth.identities
+  (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+select
+  '20000000-0000-0000-0000-000000000101', u.id, u.id::text,
+  jsonb_build_object('sub',u.id::text,'email',u.email,'email_verified',true,'phone_verified',false),
+  'email', now(), now(), now()
+from auth.users u
+where lower(u.email)=lower('admin1@gmail.com')
+  and not exists (
+    select 1 from auth.identities i where i.user_id=u.id and i.provider='email'
+  );
+
+update public.profiles p
+set auth_user_id=u.id, external_auth_id=u.id::text, updated_at=now()
+from auth.users u
+where p.id='00000000-0000-0000-0000-000000000101'
+  and lower(u.email)=lower('admin1@gmail.com');
+
+-- 2. Các gói tập dùng cho đăng ký và thanh toán mẫu.
 insert into public.membership_plans
   (id, name, price, duration_days, visit_limit, description, terms, is_active)
 values
-  ('00000000-0000-0000-0000-000000000401', 'Gói tháng Unlimited', 500000, 30, null, 'Tập không giới hạn trong 30 ngày.', 'Check-in tối đa một lần trong 10 phút.', true),
-  ('00000000-0000-0000-0000-000000000402', 'Gói quý Unlimited',  1350000, 90, null, 'Tập không giới hạn trong 90 ngày.', 'Không chuyển nhượng gói.', true),
-  ('00000000-0000-0000-0000-000000000403', 'Gói 12 lượt',          420000, 60, 12,   '12 lượt tập, sử dụng trong 60 ngày.', 'Mỗi check-in trừ một lượt.', true),
-  ('00000000-0000-0000-0000-000000000404', 'Gói sinh viên',        350000, 30, null, 'Ưu đãi dành cho sinh viên.', 'Xuất trình thẻ sinh viên khi đăng ký.', true),
-  ('00000000-0000-0000-0000-000000000405', 'Gói cũ 6 tháng',      2100000, 180, null,'Gói cũ để kiểm tra lịch sử.', null, false)
+  ('00000000-0000-0000-0000-000000000401', 'Gói tháng Unlimited', 500000, 30, null, 'Tập không giới hạn trong 30 ngày.', 'Không chuyển nhượng gói.', true),
+  ('00000000-0000-0000-0000-000000000402', 'Gói quý Unlimited', 1350000, 90, null, 'Tập không giới hạn trong 90 ngày.', 'Không chuyển nhượng gói.', true),
+  ('00000000-0000-0000-0000-000000000403', 'Gói 12 lượt', 420000, 60, 12, '12 lượt tập trong 60 ngày.', 'Mỗi check-in trừ một lượt.', true),
+  ('00000000-0000-0000-0000-000000000404', 'Gói sinh viên', 350000, 30, null, 'Ưu đãi dành cho sinh viên.', 'Xuất trình thẻ sinh viên khi đăng ký.', true),
+  ('00000000-0000-0000-0000-000000000405', 'Gói 6 tháng', 2400000, 180, null, 'Tập không giới hạn trong 180 ngày.', 'Không chuyển nhượng gói.', true)
 on conflict (id) do update set
   name=excluded.name, price=excluded.price, duration_days=excluded.duration_days,
   visit_limit=excluded.visit_limit, description=excluded.description,
   terms=excluded.terms, is_active=excluded.is_active, updated_at=now();
 
--- 3. Hội viên: đang tập, sắp hết hạn, đóng băng, hết hạn, ngừng hoạt động và chưa mua gói.
+-- 3. 20 hội viên với thông tin liên hệ và trạng thái đa dạng.
+with sample_members(row_no, full_name, gender, district) as (
+  values
+    (1, 'Nguyễn Văn An', 'Nam', 'Quận 1, TP.HCM'),
+    (2, 'Trần Thị Bình', 'Nữ', 'Quận 3, TP.HCM'),
+    (3, 'Lê Hoàng Cường', 'Nam', 'Quận 4, TP.HCM'),
+    (4, 'Phạm Minh Dung', 'Nữ', 'Quận 5, TP.HCM'),
+    (5, 'Võ Quốc Huy', 'Nam', 'Quận 6, TP.HCM'),
+    (6, 'Đỗ Thanh Giang', 'Nữ', 'Quận 7, TP.HCM'),
+    (7, 'Bùi Đức Hải', 'Nam', 'Quận 8, TP.HCM'),
+    (8, 'Hồ Ngọc Lan', 'Nữ', 'Quận 10, TP.HCM'),
+    (9, 'Đặng Tuấn Minh', 'Nam', 'Quận 11, TP.HCM'),
+    (10, 'Dương Thảo My', 'Nữ', 'Quận 12, TP.HCM'),
+    (11, 'Nguyễn Nhật Nam', 'Nam', 'Bình Thạnh, TP.HCM'),
+    (12, 'Trần Kim Ngân', 'Nữ', 'Phú Nhuận, TP.HCM'),
+    (13, 'Lý Thành Phát', 'Nam', 'Gò Vấp, TP.HCM'),
+    (14, 'Phan Bảo Trâm', 'Nữ', 'Tân Bình, TP.HCM'),
+    (15, 'Vũ Hoàng Quân', 'Nam', 'Tân Phú, TP.HCM'),
+    (16, 'Mai Thanh Thư', 'Nữ', 'Bình Tân, TP.HCM'),
+    (17, 'Tạ Minh Tuấn', 'Nam', 'Thủ Đức, TP.HCM'),
+    (18, 'Đinh Khánh Vy', 'Nữ', 'Nhà Bè, TP.HCM'),
+    (19, 'Ngô Anh Khoa', 'Nam', 'Hóc Môn, TP.HCM'),
+    (20, 'Cao Thu Trang', 'Nữ', 'Củ Chi, TP.HCM')
+)
 insert into public.members
   (id, profile_id, member_code, qr_token, full_name, phone, email, date_of_birth,
    gender, address, emergency_contact, notes, status, created_at)
-values
-  ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000201', 'GF-DEMO01', '10000000-0000-0000-0000-000000000001', 'Nguyễn Văn An', '0902000001', 'member.demo@gymflow.local',  '1998-04-15', 'Nam', 'Quận 7, TP.HCM', 'Nguyễn Văn Ba - 0909000001', 'Hội viên đang tập và đã gia hạn.', 'active', now()-interval '20 days'),
-  ('00000000-0000-0000-0000-000000000302', '00000000-0000-0000-0000-000000000202', 'GF-DEMO02', '10000000-0000-0000-0000-000000000002', 'Trần Thị Bình',  '0902000002', 'member2.demo@gymflow.local', '2001-09-20', 'Nữ', 'Quận 4, TP.HCM', 'Trần Văn Minh - 0909000002', 'Gói theo lượt sắp hết hạn.', 'active', now()-interval '18 days'),
-  ('00000000-0000-0000-0000-000000000303', null, 'GF-DEMO03', '10000000-0000-0000-0000-000000000003', 'Lê Hoàng Cường', '0902000003', 'cuong.demo@gymflow.local', '1995-01-11', 'Nam', 'Nhà Bè, TP.HCM', 'Lê Thị Hoa - 0909000003', 'Đang đóng băng gói.', 'active', now()-interval '40 days'),
-  ('00000000-0000-0000-0000-000000000304', null, 'GF-DEMO04', '10000000-0000-0000-0000-000000000004', 'Phạm Minh Dung',  '0902000004', 'dung.demo@gymflow.local', '1992-06-08', 'Nữ', 'Quận 1, TP.HCM', null, 'Gói đã hết hạn.', 'active', now()-interval '80 days'),
-  ('00000000-0000-0000-0000-000000000305', null, 'GF-DEMO05', '10000000-0000-0000-0000-000000000005', 'Võ Quốc Em',      '0902000005', 'em.demo@gymflow.local',   '1989-12-12', 'Nam', 'Thủ Đức, TP.HCM', null, 'Hội viên đã ngừng hoạt động.', 'inactive', now()-interval '120 days'),
-  ('00000000-0000-0000-0000-000000000306', null, 'GF-DEMO06', '10000000-0000-0000-0000-000000000006', 'Đỗ Thanh Giang',   '0902000006', 'giang.demo@gymflow.local','2003-03-22', 'Khác', 'Bình Thạnh, TP.HCM', null, 'Hội viên mới chưa mua gói.', 'active', now()-interval '2 days')
+select
+  ('00000000-0000-0000-0000-' || lpad((300+row_no)::text,12,'0'))::uuid,
+  null,
+  'GF-' || lpad(row_no::text,4,'0'),
+  ('10000000-0000-0000-0000-' || lpad(row_no::text,12,'0'))::uuid,
+  full_name,
+  '0902' || lpad(row_no::text,6,'0'),
+  'hoivien' || lpad(row_no::text,2,'0') || '@gymflow.vn',
+  (date '1988-01-01' + row_no * interval '240 days')::date,
+  gender,
+  district,
+  'Người thân - 0913' || lpad(row_no::text,6,'0'),
+  case
+    when row_no between 13 and 16 then 'Hội viên đã hết hạn gói.'
+    when row_no=19 then 'Gói tập đang đóng băng.'
+    when row_no=20 then 'Hội viên đã ngừng hoạt động.'
+    else 'Hội viên mẫu đang hoạt động.'
+  end,
+  case when row_no=20 then 'inactive' else 'active' end::public.record_status,
+  now() - row_no * interval '4 days'
+from sample_members
 on conflict (id) do update set
   profile_id=excluded.profile_id, member_code=excluded.member_code, qr_token=excluded.qr_token,
   full_name=excluded.full_name, phone=excluded.phone, email=excluded.email,
@@ -49,37 +122,72 @@ on conflict (id) do update set
   emergency_contact=excluded.emergency_contact, notes=excluded.notes,
   status=excluded.status, updated_at=now();
 
--- 4. Đăng ký gói: active, scheduled (gia hạn), frozen, expired và cancelled.
+-- 4. Mỗi hội viên có một đăng ký gói để bảo đảm 20 thanh toán hợp lệ khóa ngoại.
+with rows as (select generate_series(1,20) as row_no), subscription_data as (
+  select
+    r.row_no,
+    ('00000000-0000-0000-0000-' || lpad((300+r.row_no)::text,12,'0'))::uuid as member_id,
+    ('00000000-0000-0000-0000-' || lpad((400+((r.row_no-1)%5)+1)::text,12,'0'))::uuid as plan_id,
+    case
+      when r.row_no between 13 and 16 then current_date-p.duration_days-r.row_no
+      when r.row_no between 17 and 18 then current_date+r.row_no
+      else current_date-r.row_no
+    end as start_date,
+    p.*
+  from rows r
+  join public.membership_plans p
+    on p.id=('00000000-0000-0000-0000-' || lpad((400+((r.row_no-1)%5)+1)::text,12,'0'))::uuid
+)
 insert into public.subscriptions
   (id, member_id, plan_id, start_date, end_date, remaining_visits, status,
    plan_name_snapshot, price_snapshot, duration_days_snapshot, visit_limit_snapshot,
    sale_type, cancelled_at, cancelled_by, created_at)
-values
-  ('00000000-0000-0000-0000-000000000501', '00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000401', current_date-10, current_date+19, null, 'active',    'Gói tháng Unlimited', 500000, 30, null, 'new',     null, null, now()-interval '10 days'),
-  ('00000000-0000-0000-0000-000000000502', '00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000402', current_date+20, current_date+109, null, 'scheduled','Gói quý Unlimited', 1350000, 90, null, 'renewal', null, null, now()-interval '1 day'),
-  ('00000000-0000-0000-0000-000000000503', '00000000-0000-0000-0000-000000000302', '00000000-0000-0000-0000-000000000403', current_date-56, current_date+3, 3,    'active',    'Gói 12 lượt', 420000, 60, 12, 'new', null, null, now()-interval '56 days'),
-  ('00000000-0000-0000-0000-000000000504', '00000000-0000-0000-0000-000000000303', '00000000-0000-0000-0000-000000000402', current_date-30, current_date+59, null, 'frozen',   'Gói quý Unlimited', 1350000, 90, null, 'new', null, null, now()-interval '30 days'),
-  ('00000000-0000-0000-0000-000000000505', '00000000-0000-0000-0000-000000000304', '00000000-0000-0000-0000-000000000401', current_date-35, current_date-6, null, 'expired',   'Gói tháng Unlimited', 500000, 30, null, 'new', null, null, now()-interval '35 days'),
-  ('00000000-0000-0000-0000-000000000506', '00000000-0000-0000-0000-000000000305', '00000000-0000-0000-0000-000000000405', current_date-120,current_date+59,null, 'cancelled', 'Gói cũ 6 tháng', 2100000, 180, null, 'new', now()-interval '90 days', '00000000-0000-0000-0000-000000000101', now()-interval '120 days')
+select
+  ('00000000-0000-0000-0000-' || lpad((500+row_no)::text,12,'0'))::uuid,
+  member_id, plan_id, start_date, start_date+duration_days-1,
+  case when visit_limit is null then null else greatest(visit_limit-(row_no%6),0) end,
+  case
+    when row_no between 13 and 16 then 'expired'
+    when row_no between 17 and 18 then 'scheduled'
+    when row_no=19 then 'frozen'
+    when row_no=20 then 'cancelled'
+    else 'active'
+  end,
+  name, price, duration_days, visit_limit,
+  case when row_no%5=0 then 'renewal' else 'new' end,
+  case when row_no=20 then now()-interval '2 days' else null end,
+  case when row_no=20 then '00000000-0000-0000-0000-000000000101'::uuid else null end,
+  now()-row_no*interval '4 days'
+from subscription_data
 on conflict (id) do update set
   member_id=excluded.member_id, plan_id=excluded.plan_id, start_date=excluded.start_date,
   end_date=excluded.end_date, remaining_visits=excluded.remaining_visits, status=excluded.status,
   plan_name_snapshot=excluded.plan_name_snapshot, price_snapshot=excluded.price_snapshot,
-  duration_days_snapshot=excluded.duration_days_snapshot, visit_limit_snapshot=excluded.visit_limit_snapshot,
-  sale_type=excluded.sale_type, cancelled_at=excluded.cancelled_at,
-  cancelled_by=excluded.cancelled_by, updated_at=now();
+  duration_days_snapshot=excluded.duration_days_snapshot,
+  visit_limit_snapshot=excluded.visit_limit_snapshot, sale_type=excluded.sale_type,
+  cancelled_at=excluded.cancelled_at, cancelled_by=excluded.cancelled_by, updated_at=now();
 
--- 5. Thanh toán: tiền mặt, chuyển khoản, gia hạn và giao dịch đã hủy.
+-- 5. 20 thanh toán: xen kẽ tiền mặt/chuyển khoản, có một giao dịch đã hủy.
+with rows as (select generate_series(1,20) as row_no)
 insert into public.payments
   (id, receipt_code, subscription_id, member_id, amount, method, status,
    recorded_by, paid_at, cancelled_at, cancelled_by, cancelled_reason)
-values
-  ('00000000-0000-0000-0000-000000000601', 'PT-DEMO-0001', '00000000-0000-0000-0000-000000000501', '00000000-0000-0000-0000-000000000301', 500000,  'cash',          'valid',     '00000000-0000-0000-0000-000000000102', now()-interval '10 days', null, null, null),
-  ('00000000-0000-0000-0000-000000000602', 'PT-DEMO-0002', '00000000-0000-0000-0000-000000000502', '00000000-0000-0000-0000-000000000301', 1350000, 'bank_transfer', 'valid',     '00000000-0000-0000-0000-000000000101', now()-interval '1 day',  null, null, null),
-  ('00000000-0000-0000-0000-000000000603', 'PT-DEMO-0003', '00000000-0000-0000-0000-000000000503', '00000000-0000-0000-0000-000000000302', 420000,  'cash',          'valid',     '00000000-0000-0000-0000-000000000102', now()-interval '56 days', null, null, null),
-  ('00000000-0000-0000-0000-000000000604', 'PT-DEMO-0004', '00000000-0000-0000-0000-000000000504', '00000000-0000-0000-0000-000000000303', 1350000, 'bank_transfer', 'valid',     '00000000-0000-0000-0000-000000000101', now()-interval '30 days', null, null, null),
-  ('00000000-0000-0000-0000-000000000605', 'PT-DEMO-0005', '00000000-0000-0000-0000-000000000505', '00000000-0000-0000-0000-000000000304', 500000,  'cash',          'valid',     '00000000-0000-0000-0000-000000000102', now()-interval '35 days', null, null, null),
-  ('00000000-0000-0000-0000-000000000606', 'PT-DEMO-0006', '00000000-0000-0000-0000-000000000506', '00000000-0000-0000-0000-000000000305', 2100000, 'bank_transfer', 'cancelled', '00000000-0000-0000-0000-000000000102', now()-interval '120 days',now()-interval '90 days','00000000-0000-0000-0000-000000000101','Khách yêu cầu hủy giao dịch mẫu')
+select
+  ('00000000-0000-0000-0000-' || lpad((600+row_no)::text,12,'0'))::uuid,
+  'PT-' || to_char(current_date,'YYYYMM') || '-' || lpad(row_no::text,4,'0'),
+  ('00000000-0000-0000-0000-' || lpad((500+row_no)::text,12,'0'))::uuid,
+  ('00000000-0000-0000-0000-' || lpad((300+row_no)::text,12,'0'))::uuid,
+  s.price_snapshot,
+  case when row_no%2=0 then 'bank_transfer' else 'cash' end::public.payment_method,
+  case when row_no=20 then 'cancelled' else 'valid' end::public.payment_status,
+  '00000000-0000-0000-0000-000000000101',
+  now()-row_no*interval '36 hours',
+  case when row_no=20 then now()-interval '2 days' else null end,
+  case when row_no=20 then '00000000-0000-0000-0000-000000000101'::uuid else null end,
+  case when row_no=20 then 'Khách yêu cầu hủy giao dịch mẫu' else null end
+from rows
+join public.subscriptions s
+  on s.id=('00000000-0000-0000-0000-' || lpad((500+row_no)::text,12,'0'))::uuid
 on conflict (id) do update set
   receipt_code=excluded.receipt_code, subscription_id=excluded.subscription_id,
   member_id=excluded.member_id, amount=excluded.amount, method=excluded.method,
@@ -87,58 +195,48 @@ on conflict (id) do update set
   cancelled_at=excluded.cancelled_at, cancelled_by=excluded.cancelled_by,
   cancelled_reason=excluded.cancelled_reason;
 
--- 6. Lịch sử check-in trong hôm nay và những ngày gần đây.
-insert into public.check_ins (id, member_id, subscription_id, checked_in_by, checked_in_at)
-values
-  ('00000000-0000-0000-0000-000000000701', '00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000501', '00000000-0000-0000-0000-000000000102', now()-interval '1 hour'),
-  ('00000000-0000-0000-0000-000000000702', '00000000-0000-0000-0000-000000000302', '00000000-0000-0000-0000-000000000503', '00000000-0000-0000-0000-000000000102', now()-interval '3 hours'),
-  ('00000000-0000-0000-0000-000000000703', '00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000501', '00000000-0000-0000-0000-000000000101', now()-interval '1 day'),
-  ('00000000-0000-0000-0000-000000000704', '00000000-0000-0000-0000-000000000302', '00000000-0000-0000-0000-000000000503', '00000000-0000-0000-0000-000000000102', now()-interval '2 days'),
-  ('00000000-0000-0000-0000-000000000705', '00000000-0000-0000-0000-000000000303', '00000000-0000-0000-0000-000000000504', '00000000-0000-0000-0000-000000000101', now()-interval '5 days')
-on conflict (id) do update set checked_in_at=excluded.checked_in_at;
-
--- 7. Một kỳ đóng băng đang hoạt động.
-insert into public.subscription_freezes
-  (id, subscription_id, start_date, expected_end_date, reason, status, created_by, created_at)
-values
-  ('00000000-0000-0000-0000-000000000801', '00000000-0000-0000-0000-000000000504', current_date-2, current_date+5, 'Đi công tác 1 tuần', 'active', '00000000-0000-0000-0000-000000000101', now()-interval '2 days')
+-- 6. 10 khoản chi phí thuộc nhiều danh mục khác nhau.
+with sample_expenses(row_no, category_name, description, amount, days_ago, recurring) as (
+  values
+    (1, 'Thuê mặt bằng', 'Tiền thuê mặt bằng tháng này', 18000000::numeric, 2, true),
+    (2, 'Điện nước', 'Tiền điện tháng này', 4200000::numeric, 3, true),
+    (3, 'Điện nước', 'Tiền nước tháng này', 950000::numeric, 3, true),
+    (4, 'Lương nhân sự', 'Lương huấn luyện viên', 12000000::numeric, 5, true),
+    (5, 'Lương nhân sự', 'Lương nhân viên lễ tân', 8000000::numeric, 5, true),
+    (6, 'Thiết bị', 'Bảo trì máy chạy bộ', 2500000::numeric, 7, false),
+    (7, 'Thiết bị', 'Mua thảm tập yoga', 1800000::numeric, 9, false),
+    (8, 'Marketing', 'Quảng cáo mạng xã hội', 3000000::numeric, 11, false),
+    (9, 'Khác', 'Nước uống cho hội viên', 1200000::numeric, 13, true),
+    (10, 'Khác', 'Vệ sinh và giặt khăn', 1600000::numeric, 15, true)
+)
+insert into public.expenses
+  (id, category_id, description, amount, expense_date, receipt_number,
+   recurring, status, created_by, created_at)
+select
+  ('00000000-0000-0000-0000-' || lpad((1400+e.row_no)::text,12,'0'))::uuid,
+  c.id, e.description, e.amount, current_date-e.days_ago,
+  'CP-' || to_char(current_date,'YYYYMM') || '-' || lpad(e.row_no::text,3,'0'),
+  e.recurring, 'valid', '00000000-0000-0000-0000-000000000101',
+  now()-e.days_ago*interval '1 day'
+from sample_expenses e
+join public.expense_categories c on c.name=e.category_name
 on conflict (id) do update set
-  start_date=excluded.start_date, expected_end_date=excluded.expected_end_date,
-  reason=excluded.reason, status=excluded.status, created_by=excluded.created_by;
-
--- 8. Dữ liệu mẫu cho chăm sóc hội viên.
-insert into public.member_follow_ups
-  (id, member_id, assigned_to, status, note, next_contact_at, created_by)
-values
-  ('00000000-0000-0000-0000-000000001501', '00000000-0000-0000-0000-000000000302', '00000000-0000-0000-0000-000000000102', 'scheduled', 'Khách muốn được gọi lại để tư vấn gia hạn.', now()+interval '1 day', '00000000-0000-0000-0000-000000000101')
-on conflict (id) do update set status=excluded.status, note=excluded.note, next_contact_at=excluded.next_contact_at, updated_at=now();
-
--- 9. Chi phí mẫu trong tháng hiện tại.
-insert into public.expenses(id,category_id,description,amount,expense_date,receipt_number,created_by)
-select '00000000-0000-0000-0000-000000001401',id,'Tiền điện nước tháng này',350000,current_date,'HD-DEMO-01','00000000-0000-0000-0000-000000000101'
-from public.expense_categories where name='Điện nước'
-on conflict (id) do update set amount=excluded.amount,expense_date=excluded.expense_date,receipt_number=excluded.receipt_number;
-
--- 10. Nhật ký thao tác quan trọng.
-insert into public.audit_logs (id, actor_id, action, entity_type, entity_id, details, created_at)
-values
-  ('00000000-0000-0000-0000-000000000901', '00000000-0000-0000-0000-000000000102', 'create',          'member',       '00000000-0000-0000-0000-000000000301', '{"source":"seed","member_code":"GF-DEMO01"}', now()-interval '20 days'),
-  ('00000000-0000-0000-0000-000000000902', '00000000-0000-0000-0000-000000000102', 'sell_membership', 'subscription', '00000000-0000-0000-0000-000000000501', '{"source":"seed","sale_type":"new"}', now()-interval '10 days'),
-  ('00000000-0000-0000-0000-000000000903', '00000000-0000-0000-0000-000000000101', 'sell_membership', 'subscription', '00000000-0000-0000-0000-000000000502', '{"source":"seed","sale_type":"renewal"}', now()-interval '1 day'),
-  ('00000000-0000-0000-0000-000000000904', '00000000-0000-0000-0000-000000000101', 'freeze',          'subscription', '00000000-0000-0000-0000-000000000504', '{"source":"seed","reason":"Đi công tác 1 tuần"}', now()-interval '2 days'),
-  ('00000000-0000-0000-0000-000000000905', '00000000-0000-0000-0000-000000000101', 'cancel_payment',  'payment',      '00000000-0000-0000-0000-000000000606', '{"source":"seed","reason":"Khách yêu cầu hủy"}', now()-interval '90 days')
-on conflict (id) do update set details=excluded.details, created_at=excluded.created_at;
+  category_id=excluded.category_id, description=excluded.description,
+  amount=excluded.amount, expense_date=excluded.expense_date,
+  receipt_number=excluded.receipt_number, recurring=excluded.recurring,
+  status=excluded.status, created_by=excluded.created_by;
 
 commit;
 
--- Kết quả kiểm tra sau khi seed.
-select 'profiles' as table_name, count(*) as demo_rows from public.profiles where id::text like '00000000-0000-0000-0000-000000000%'
-union all select 'plans', count(*) from public.membership_plans where id::text like '00000000-0000-0000-0000-0000000004%'
-union all select 'members', count(*) from public.members where id::text like '00000000-0000-0000-0000-0000000003%'
-union all select 'subscriptions', count(*) from public.subscriptions where id::text like '00000000-0000-0000-0000-0000000005%'
-union all select 'payments', count(*) from public.payments where id::text like '00000000-0000-0000-0000-0000000006%'
-union all select 'check_ins', count(*) from public.check_ins where id::text like '00000000-0000-0000-0000-0000000007%'
-union all select 'freezes', count(*) from public.subscription_freezes where id::text like '00000000-0000-0000-0000-0000000008%'
-union all select 'follow_ups', count(*) from public.member_follow_ups where id::text like '00000000-0000-0000-0000-0000000015%'
-union all select 'expenses', count(*) from public.expenses where id::text like '00000000-0000-0000-0000-0000000014%'
-union all select 'audit_logs', count(*) from public.audit_logs where id::text like '00000000-0000-0000-0000-0000000009%';
+-- Kết quả mong đợi trên database mới: 1 admin, 20 hội viên, 20 thanh toán, 10 chi phí.
+select 'admin_accounts' as data_type, count(*) as sample_rows
+from public.profiles where id='00000000-0000-0000-0000-000000000101'
+union all
+select 'members', count(*) from public.members
+where id between '00000000-0000-0000-0000-000000000301' and '00000000-0000-0000-0000-000000000320'
+union all
+select 'payments', count(*) from public.payments
+where id between '00000000-0000-0000-0000-000000000601' and '00000000-0000-0000-0000-000000000620'
+union all
+select 'expenses', count(*) from public.expenses
+where id between '00000000-0000-0000-0000-000000001401' and '00000000-0000-0000-0000-000000001410';

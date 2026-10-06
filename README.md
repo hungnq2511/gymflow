@@ -78,7 +78,14 @@ npm run build
 
 Sau khi đã chạy đủ migration, mở Supabase SQL Editor và chạy toàn bộ file `supabase/seed.sql`. File có UUID cố định, có thể chạy lại và không xóa dữ liệu thật.
 
-Dữ liệu mẫu gồm 4 profile, 6 hội viên, 5 loại gói, 6 đăng ký, 6 thanh toán, 5 check-in, một kỳ đóng băng và audit log. Để đăng nhập bằng tài khoản mẫu, tạo Auth User thủ công bằng đúng một trong các email trong file seed; trigger sẽ tự liên kết Auth User với profile tương ứng.
+Dữ liệu mẫu gồm một tài khoản quản trị, 20 hội viên, 5 loại gói, 20 đăng ký, 20 thanh toán và 10 khoản chi phí. File seed tự tạo Supabase Auth User và liên kết với profile quản trị, nên có thể đăng nhập ngay bằng:
+
+```text
+Email: admin1@gmail.com
+Mật khẩu: Admin@123
+```
+
+Đây là thông tin đăng nhập dành cho môi trường demo; hãy thay đổi hoặc xóa tài khoản này trước khi dùng dữ liệu thật.
 
 ## Bảo mật và dữ liệu
 
